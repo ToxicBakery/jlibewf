@@ -1,4 +1,6 @@
-package com.ToxicBakery.libs.jlibewf;/*
+package com.ToxicBakery.libs.jlibewf;
+
+/*
  * The software provided here is released by the Naval Postgraduate
  * School, an agency of the U.S. Department of Navy.  The software
  * bears no warranty, either expressed or implied. NPS does not assume
@@ -16,6 +18,10 @@ package com.ToxicBakery.libs.jlibewf;/*
  * Released into the public domain on December 17, 2010 by Bruce Allen.
  */
 
+import com.ToxicBakery.libs.jlibewf.section.HeaderSection;
+import com.ToxicBakery.libs.jlibewf.section.SectionPrefix;
+import com.ToxicBakery.libs.jlibewf.section.TableSection;
+import com.ToxicBakery.libs.jlibewf.section.VolumeSection;
 import org.apache.log4j.Logger;
 
 import java.io.ByteArrayOutputStream;
@@ -23,6 +29,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * The <code>com.ToxicBakery.libs.jlibewf.EWFFileReader</code> class reads EWF files formatted in the .E01 format.
@@ -32,47 +39,49 @@ public class EWFFileReader {
     /**
      * The build date of this version, {@value}.
      */
-    public static final String VERSION_DATE = "20110721";
+    private static final String VERSION_DATE = "20110721";
 
     /**
      * The default logger name, {@value}.
      */
-    public static final String DEFAULT_LOGGER_NAME = "edu.nps.jlibewf";
+    private static final String DEFAULT_LOGGER_NAME = "edu.nps.jlibewf";
 
     /**
      * The logger to which log information in the <code>jlibewf</code> package is sent,
      * see org.apache.log4j.Logger.
      * The logger is initially set to <code>DEFAULT_LOGGER_NAME</code>.
      */
-    protected static Logger logger = Logger.getLogger(DEFAULT_LOGGER_NAME);
+    static Logger logger = Logger.getLogger(DEFAULT_LOGGER_NAME);
 
     static {
         logger.info("com.ToxicBakery.libs.jlibewf.EWFFileReader build date " + VERSION_DATE);
     }
 
-    private final ArrayList<EWFSection.SectionPrefix> sectionPrefixArray = new ArrayList<EWFSection.SectionPrefix>();
+    private final List<SectionPrefix> sectionPrefixArray;
+    private final EWFSegmentFileReader reader;
+    private final String longFormat;
+
     private File firstFile;
     private int chunkSize;
     private long imageSize = 0;
-    private EWFSegmentFileReader reader;
+
     /**
      * Constructs the EWF file reader for reading EWF files formatted in the .E01 format.
      *
      * @param file the first EWF file in the serial sequence
      * @throws IOException if the reader cannot be created
      */
-    public EWFFileReader(File file) throws IOException {
-
-        // set the segment file reader to use
-        reader = new EWFSegmentFileReader();
-
-        // set the default chunk size
-        chunkSize = reader.DEFAULT_CHUNK_SIZE;
+    public EWFFileReader(File file, String longFormat) throws IOException {
+        this.longFormat = longFormat;
+        sectionPrefixArray = new ArrayList<>();
 
         // validate the file as the first EWF file
-        if (!reader.isValidFirstEWFFilename(file)) {
+        if (!EWFSegmentFileReader.isValidFirstEWFFilename(file)) {
             throw new IOException("Invalid first EWF filename file " + file.toString());
         }
+
+        reader = new EWFSegmentFileReader();
+        chunkSize = EWFSegmentFileReader.DEFAULT_CHUNK_SIZE;
 
         // set file as first file
         firstFile = file;
@@ -140,8 +149,6 @@ public class EWFFileReader {
         outStream.write(chunkBytes, offset, numBytes);
         return outStream.toByteArray();
     }
-
-    // interface ImageReader
 
     /**
      * Reads the image bytes at the specified start address.
@@ -213,26 +220,25 @@ public class EWFFileReader {
         while (true) {
 
             // get the next section prefix
-            EWFSection.SectionPrefix sectionPrefix = new EWFSection.SectionPrefix(
-                    reader, nextFile, nextSectionStartAddress, nextChunkIndex);
+            SectionPrefix sectionPrefix = new SectionPrefix(reader, nextFile, nextSectionStartAddress, nextChunkIndex, longFormat);
 
             // add the next section prefix
             sectionPrefixArray.add(sectionPrefix);
 
             // update the section start address
-            nextSectionStartAddress = sectionPrefix.nextOffset;
+            nextSectionStartAddress = sectionPrefix.getNextOffset();
 
             // update the next chunk index
-            nextChunkIndex = sectionPrefix.nextChunkIndex;
+            nextChunkIndex = sectionPrefix.getNextChunkIndex();
 
             // move to next file
-            if (sectionPrefix.sectionType == EWFSection.SectionType.NEXT_TYPE) {
-                nextFile = reader.getNextFile(nextFile);
+            if (sectionPrefix.getSectionType() == EWFSection.SectionType.NEXT_TYPE) {
+                nextFile = EWFSegmentFileReader.getNextFile(nextFile);
                 nextSectionStartAddress = EWFSegmentFileReader.FILE_FIRST_SECTION_START_ADDRESS;
             }
 
             // stop after last file
-            if (sectionPrefix.sectionType == EWFSection.SectionType.DONE_TYPE) {
+            if (sectionPrefix.getSectionType() == EWFSection.SectionType.DONE_TYPE) {
                 break;
             }
         }
@@ -244,12 +250,12 @@ public class EWFFileReader {
     // loads the chunk size during initialization
     private void loadChunkSize() throws IOException {
         // look for the Volume Section prefix because it contains chunk size information
-        for (EWFSection.SectionPrefix sectionPrefix : sectionPrefixArray) {
-            if (sectionPrefix.sectionType == EWFSection.SectionType.VOLUME_TYPE) {
+        for (SectionPrefix sectionPrefix : sectionPrefixArray) {
+            if (sectionPrefix.getSectionType() == EWFSection.SectionType.VOLUME_TYPE) {
 
                 // set the chunk size from bytes per sector * sectors per chunk
-                EWFSection.VolumeSection volumeSection = new EWFSection.VolumeSection(reader, sectionPrefix);
-                chunkSize = volumeSection.bytesPerSector * volumeSection.sectorsPerChunk;
+                VolumeSection volumeSection = new VolumeSection(reader, sectionPrefix, longFormat);
+                chunkSize = volumeSection.getBytesPerSector() * volumeSection.getSectorsPerChunk();
 
                 // log the chunk size used
                 logger.info("com.ToxicBakery.libs.jlibewf.EWFFileReader.loadChunkSize Chunk size: " + chunkSize);
@@ -264,10 +270,10 @@ public class EWFFileReader {
     // reads the Header information
     private String readHeaderInformation() throws IOException {
         // look for the Header Section prefix because it contains the header information
-        for (EWFSection.SectionPrefix sectionPrefix : sectionPrefixArray) {
-            if (sectionPrefix.sectionType == EWFSection.SectionType.HEADER_TYPE) {
+        for (SectionPrefix sectionPrefix : sectionPrefixArray) {
+            if (sectionPrefix.getSectionType() == EWFSection.SectionType.HEADER_TYPE) {
                 // get the header section as an object
-                EWFSection.HeaderSection headerSection = new EWFSection.HeaderSection(reader, sectionPrefix);
+                HeaderSection headerSection = new HeaderSection(reader, sectionPrefix, longFormat);
 
                 // return the header text from the header section
                 return headerSection.getHeaderText();
@@ -283,8 +289,8 @@ public class EWFFileReader {
     // loads the media size during initialization
     private void loadMediaSize() throws IOException {
         // get last chunk index from the chunk index of the last Section prefix
-        EWFSection.SectionPrefix sectionPrefix = sectionPrefixArray.get(sectionPrefixArray.size() - 1);
-        int lastChunkIndex = sectionPrefix.nextChunkIndex - 1;
+        SectionPrefix sectionPrefix = sectionPrefixArray.get(sectionPrefixArray.size() - 1);
+        int lastChunkIndex = sectionPrefix.getNextChunkIndex() - 1;
 
         // ensure that there are chunks
         if (lastChunkIndex == -1) {
@@ -300,15 +306,15 @@ public class EWFFileReader {
         // note load results
         logger.trace("com.ToxicBakery.libs.jlibewf.EWFFileReader.loadMediaSize: lastChunkIndex: " + lastChunkIndex
                 + ", chunkSize: " + chunkSize + ", last chunk length: " + bytes.length
-                + ", final size: " + String.format(EWFSegmentFileReader.longFormat, imageSize));
+                + ", final size: " + String.format(longFormat, imageSize));
     }
 
     // reads the requested media chunk
     private byte[] readMediaChunk(int chunkIndex) throws IOException {
 
         // find the section prefix containing the chunk index
-        Iterator<EWFSection.SectionPrefix> iterator = sectionPrefixArray.iterator();
-        EWFSection.SectionPrefix sectionPrefix;
+        Iterator<SectionPrefix> iterator = sectionPrefixArray.iterator();
+        SectionPrefix sectionPrefix;
         while (true) {
 
             // bad data state if the section prefix containing the chunk index cannot be found
@@ -318,27 +324,27 @@ public class EWFFileReader {
 
             // look for the section prefix containing the chunk index
             sectionPrefix = iterator.next();
-            if (chunkIndex >= sectionPrefix.chunkIndex && chunkIndex < sectionPrefix.nextChunkIndex) {
+            if (chunkIndex >= sectionPrefix.getChunkIndex() && chunkIndex < sectionPrefix.getNextChunkIndex()) {
                 // the requested chunk index is within this range.
                 break;
             }
         }
 
         // determine the table base offset from the table section, used by EnCase v.6+
-        EWFSection.TableSection tableSection = new EWFSection.TableSection(reader, sectionPrefix);
-        long tableBaseOffset = tableSection.tableBaseOffset;
+        TableSection tableSection = new TableSection(reader, sectionPrefix, longFormat);
+        long tableBaseOffset = tableSection.getTableBaseOffset();
 
         // log media offset value used
         if (tableBaseOffset != 0) {
             logger.info("com.ToxicBakery.libs.jlibewf.EWFFileReader.readMediaChunk non-zero tableBaseOffset: "
-                    + String.format(EWFSegmentFileReader.longFormat, tableBaseOffset));
+                    + String.format(longFormat, tableBaseOffset));
         }
 
         // get the table section chunk table
-        EWFSection.ChunkTable chunkTable = new EWFSection.ChunkTable(reader, sectionPrefix);
+        EWFSection.ChunkTable chunkTable = new EWFSection.ChunkTable(reader, sectionPrefix, longFormat);
 
         // get the chunk table index with respect to the Table Section
-        int chunkTableIndex = chunkIndex - sectionPrefix.chunkIndex;
+        int chunkTableIndex = chunkIndex - sectionPrefix.getChunkIndex();
 
         // get the file offset to the media chunk base
         long chunkStartOffset = chunkTable.getChunkStartOffset(chunkTableIndex);
@@ -356,7 +362,7 @@ public class EWFFileReader {
 
         // set the media chunk end address
         long mediaChunkEndedAddress;    // points to byte after end
-        if (chunkIndex + 1 < sectionPrefix.nextChunkIndex) {
+        if (chunkIndex + 1 < sectionPrefix.getNextChunkIndex()) {
             // the end address of the chunk is just before the start address of the next chunk
 
             // get the file offset to the next media chunk base
@@ -370,15 +376,15 @@ public class EWFFileReader {
             // the end address is just before the start of another Section
 
             // loop through Section Prefixes to find the one surrounding the chunk's start address
-            Iterator<EWFSection.SectionPrefix> endpointIterator = sectionPrefixArray.iterator();
-            EWFSection.SectionPrefix addressedSectionPrefix;
+            Iterator<SectionPrefix> endpointIterator = sectionPrefixArray.iterator();
+            SectionPrefix addressedSectionPrefix;
             while (true) {
 
                 // bad data state if the section prefix containing the media chunk address cannot be found
                 if (!endpointIterator.hasNext()) {
                     throw new IOException(
                             "Section surrounding address "
-                                    + String.format(EWFSegmentFileReader.longFormat, mediaChunkBeginAddress)
+                                    + String.format(longFormat, mediaChunkBeginAddress)
                                     + " cannot be found.");
                 }
 
@@ -386,12 +392,12 @@ public class EWFFileReader {
                 addressedSectionPrefix = endpointIterator.next();
 
                 // check that the addressed section prefix encapsulates the media chunk address
-                if (addressedSectionPrefix.file == sectionPrefix.file
-                        && addressedSectionPrefix.fileOffset < mediaChunkBeginAddress
-                        && addressedSectionPrefix.nextOffset > mediaChunkBeginAddress) {
+                if (addressedSectionPrefix.getFile() == sectionPrefix.getFile()
+                        && addressedSectionPrefix.getFileOffset() < mediaChunkBeginAddress
+                        && addressedSectionPrefix.getNextOffset() > mediaChunkBeginAddress) {
                     // the section encapsulates the data so the chunk end address is just before
                     // the start address of the next section
-                    mediaChunkEndedAddress = addressedSectionPrefix.nextOffset;
+                    mediaChunkEndedAddress = addressedSectionPrefix.getNextOffset();
                     break;
                 }
             }
@@ -410,10 +416,10 @@ public class EWFFileReader {
         if (isCompressed) {
 
             // read using decompression, which inherently verifies the checksum
-            bytes = reader.readZlib(sectionPrefix.file, mediaChunkBeginAddress, mediaReadSize, chunkSize);
+            bytes = reader.readZLib(sectionPrefix.getFile(), mediaChunkBeginAddress, mediaReadSize, chunkSize);
         } else {
             // extract the bytes using Adler32
-            byte[] tempBytes = reader.readAdler32(sectionPrefix.file, mediaChunkBeginAddress, mediaReadSize);
+            byte[] tempBytes = reader.readAdler32(sectionPrefix.getFile(), mediaChunkBeginAddress, mediaReadSize);
 
             // remove the four checksum bytes
             ByteArrayOutputStream outStream = new ByteArrayOutputStream(tempBytes.length - 4);
@@ -440,7 +446,7 @@ public class EWFFileReader {
         // file size
         buffer.append("\n");
         buffer.append("Image size: ");
-        String imageSizeString = String.format(EWFSegmentFileReader.longFormat, imageSize);
+        String imageSizeString = String.format(longFormat, imageSize);
         buffer.append(imageSizeString);
 
         // chunk size
@@ -461,9 +467,7 @@ public class EWFFileReader {
      * Closes the reader, releasing resources.
      */
     public void close() throws IOException {
-        if (reader != null) {
-            reader.closeFileChannel();
-        }
+        reader.closeFileChannel();
     }
 }
 

@@ -1,4 +1,6 @@
-package com.ToxicBakery.libs.jlibewf;/*
+package com.ToxicBakery.libs.jlibewf;
+
+/*
  * The software provided here is released by the Naval Postgraduate
  * School, an agency of the U.S. Department of Navy.  The software
  * bears no warranty, either expressed or implied. NPS does not assume
@@ -26,11 +28,17 @@ import java.io.IOException;
 public final class EWFIOException extends IOException {
     private static final long serialVersionUID = 1;
 
-    // the file associated with the exception
-    private File file;
+    /**
+     * The file associated with the exception
+     */
+    private final File file;
 
-    // the address associated with the exception
-    private long address;
+    /**
+     * The address associated with the exception
+     */
+    private final long address;
+
+    private final String longFormat;
 
     /**
      * Constructs an Exception event containing the file and address that sourced the exception.
@@ -38,8 +46,9 @@ public final class EWFIOException extends IOException {
      * @param file    the file from which the exception originated
      * @param address the address from which the exception originated
      */
-    protected EWFIOException(String message, File file, long address) {
+    public EWFIOException(String message, File file, long address, String longFormat) {
         super(message);
+        this.longFormat = longFormat;
         this.file = file;
         this.address = address;
     }
@@ -69,7 +78,7 @@ public final class EWFIOException extends IOException {
      */
     public String getMessage() {
         return super.getMessage() + " at file " + file.toString() + " file address "
-                + String.format(EWFSegmentFileReader.longFormat, address);
+                + String.format(longFormat, address);
     }
 }
 
