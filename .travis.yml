@@ -1,0 +1,16 @@
+language: java
+
+sudo: false
+
+jdk:
+    - oraclejdk7
+
+script:
+    - echo "Travis branch is $TRAVIS_BRANCH"
+    - echo "Travis branch is in pull request? $TRAVIS_PULL_REQUEST"
+    - echo "Travis tag $TRAVIS_TAG"
+    - gradle test publish --continue
+
+notifications:
+  email:
+    - toxicbakery@gmail.com
