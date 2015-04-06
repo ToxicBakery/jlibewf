@@ -1,8 +1,9 @@
 apply plugin: 'java'
-apply plugin: 'maven-publish'
+apply plugin: 'maven'
+apply plugin: 'signing'
 
 group = 'com.ToxicBakery.libs.jlibewf'
-version = "1.0.${getBuildNumber()}" + (isRelease() ?: "-SNAPSHOT")
+version = "1.0.${getBuildNumber()}" + (isRelease() ? "" : "-SNAPSHOT")
 
 println "Version: $version"
 println "Is Travis: ${isTravis()}"
@@ -20,37 +21,92 @@ dependencies {
     compile 'log4j:log4j:1.2.16'
 }
 
-task sourceJar(type: Jar) {
-    from sourceSets.main.allJava
-}
+afterEvaluate { project ->
+    uploadArchives {
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            artifactId 'jlibewf'
-            status = isTravis() ? isRelease() ? "release" : "snapshot" : "snapshot"
+        repositories {
+            mavenDeployer {
+                status = isRelease() ? "release" : "snapshot"
+                configuration = configurations.archives
 
-            from components.java
-
-            artifact sourceJar {
-                classifier "sources"
-            }
-        }
-    }
-
-    repositories {
-        maven {
-            if (isTravis()) {
-                url isRelease() ? "https://oss.sonatype.org/service/local/staging/deploy/maven2/" : "https://oss.sonatype.org/content/repositories/snapshots"
-                credentials {
-                    username getRepositoryUsername()
-                    password getRepositoryPassword()
+                if (isTravis()) {
+                    beforeDeployment {
+                        MavenDeployment deployment -> signing.signPom(deployment)
+                    }
                 }
-            } else {
-                url mavenLocal().url
+
+                pom.artifactId = POM_ARTIFACT_ID
+
+                if (isTravis()) {
+                    repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                        authentication(userName: getRepositoryUsername(), password: getRepositoryPassword())
+                    }
+
+                    snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots") {
+                        authentication(userName: getRepositoryUsername(), password: getRepositoryPassword())
+                    }
+                } else {
+                    repository(url: mavenLocal().url)
+                }
+
+                pom.project {
+                    name POM_NAME
+                    packaging POM_PACKAGING
+                    description POM_DESCRIPTION
+                    url POM_URL
+
+                    scm {
+                        url POM_SCM_URL
+                        connection POM_SCM_CONNECTION
+                        developerConnection POM_SCM_DEV_CONNECTION
+                    }
+
+                    licenses {
+                        license {
+                            name POM_LICENCE_NAME
+                            url POM_LICENCE_URL
+                            distribution POM_LICENCE_DIST
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id POM_DEVELOPER_ID
+                            name POM_DEVELOPER_NAME
+                            email POM_DEVELOPER_EMAIL
+                            organization POM_DEVELOPER_ORGANIZATION
+                            organizationUrl POM_DEVELOPER_ORGANIZATION_URL
+                        }
+                    }
+                }
             }
         }
     }
+
+
+    if (isTravis()) {
+        signing {
+            sign configurations.archives
+        }
+    }
+
+    // custom tasks for creating source/javadoc jars
+    task sourcesJar(type: Jar, dependsOn: classes) {
+        classifier = 'sources'
+        from sourceSets.main.allSource
+    }
+
+    task javadocJar(type: Jar, dependsOn: javadoc) {
+        classifier = 'javadoc'
+        from javadoc.destinationDir
+    }
+
+    // add javadoc/source jar tasks as artifacts
+    artifacts {
+        archives sourcesJar
+        archives javadocJar
+    }
+
 }
 
 def isTravis() {
@@ -58,11 +114,11 @@ def isTravis() {
 }
 
 def isRelease() {
-    return isTravis() && isTag() && getBuildNumber() > 0
+    return isTravis() && isTag() && Integer.parseInt(getBuildNumber()) > 0
 }
 
-def getBuildNumber() {
-    return System.env['TRAVIS_BUILD_NUMBER'] ?: 0
+String getBuildNumber() {
+    return System.env['TRAVIS_BUILD_NUMBER'] ?: "0"
 }
 
 def isTag() {
@@ -70,9 +126,9 @@ def isTag() {
 }
 
 def getRepositoryUsername() {
-    return hasProperty('sonatype_user') ? sonatype_user : ""
+    return System.env['sonatype_user'] ?: hasProperty('sonatype_user') ? sonatype_user : ""
 }
 
 def getRepositoryPassword() {
-    return hasProperty('sonatype_pass') ? sonatype_pass : ""
+    return System.env['sonatype_pass'] ?: hasProperty('sonatype_pass') ? sonatype_pass : ""
 }
