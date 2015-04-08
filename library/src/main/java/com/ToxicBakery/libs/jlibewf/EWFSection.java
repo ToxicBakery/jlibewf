@@ -32,6 +32,8 @@ import java.util.Map;
  */
 public class EWFSection {
 
+    private static final Map<String, SectionType> MAP = new HashMap<>();
+
     /**
      * Indicates whether the specified long is a positive integer.
      * Use this before typecasting from <code>long</code> to <code>int</code>.
@@ -107,7 +109,7 @@ public class EWFSection {
          */
         @SuppressWarnings("unused")
         public static final SectionType HASH_TYPE = new SectionType("hash");
-        private static final Map<String, SectionType> MAP = new HashMap<>();
+
         // the name of the Section type.
         private String sectionTypeString;
 

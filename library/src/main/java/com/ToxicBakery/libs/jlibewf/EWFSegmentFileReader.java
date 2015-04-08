@@ -48,7 +48,7 @@ public class EWFSegmentFileReader {
     private static final byte[] EWF_SIGNATURE = {0x45, 0x56, 0x46, 0x09, 0x0d, 0x0a, (byte) 0xff, 0x00};
     private static final byte[] SERIAL_E99 = new byte[]{'E', '9', '9'};
     private static final byte[] SERIAL_EAA = new byte[]{'E', 'A', 'A'};
-    private static final String DEFAULT_LONG_FORMAT = "%1$d (0x%1$08x)";
+
     /**
      * object for calculating an Adler32 checksum
      */
@@ -63,10 +63,6 @@ public class EWFSegmentFileReader {
     private File currentOpenedFile;
     private FileInputStream currentOpenedFileInputStream;
     private FileChannel currentOpenedFileChannel;
-
-    EWFSegmentFileReader() {
-        this(DEFAULT_LONG_FORMAT);
-    }
 
     /**
      * Sets the format for formatting long to string.
