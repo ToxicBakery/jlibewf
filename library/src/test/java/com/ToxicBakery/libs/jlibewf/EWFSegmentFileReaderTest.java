@@ -184,7 +184,7 @@ public class EWFSegmentFileReaderTest {
             outputStream.write(writtenBytes);
             outputStream.close();
 
-            ewfSegmentFileReader = new EWFSegmentFileReader();
+            ewfSegmentFileReader = new EWFSegmentFileReader("%1$d (0x%1$08x)");
             ewfSegmentFileReader.readRaw(file, 0, 8);
         } finally {
             if (ewfSegmentFileReader != null) {
@@ -210,7 +210,7 @@ public class EWFSegmentFileReaderTest {
             outputStream.write(writtenBytes);
             outputStream.close();
 
-            EWFSegmentFileReader ewfSegmentFileReader = new EWFSegmentFileReader();
+            EWFSegmentFileReader ewfSegmentFileReader = new EWFSegmentFileReader("%1$d (0x%1$08x)");
             byte[] readBytes = ewfSegmentFileReader.readRaw(file, 0, 8);
             Assert.assertArrayEquals(writtenBytes, readBytes);
             ewfSegmentFileReader.closeFileChannel();
